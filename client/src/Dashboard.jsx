@@ -126,6 +126,7 @@ const styles = {
     height: '100%',
     width: '100%',
     backgroundColor: colors.darkGrey,
+    flexDirection: 'column ',
   },
 
   dashboard: {
@@ -134,14 +135,19 @@ const styles = {
     backgroundColor: colors.darkGrey,
   },
 
+  chart: {
+    flex: 1,
+    width: '100%',
+  },
+
+  recordDataTitle: {
+    textAlign: 'center',
+    fontSize: '1.4em',
+  },
+
   recordDataItem: {
     marginLeft: '8px',
     marginTop: '8px',
-  },
-
-  chart: {
-    width: '100%',
-    height: '100%',
   },
 
   dot: {
@@ -149,83 +155,87 @@ const styles = {
   },
 };
 
-const record = 'record_1 - 01.12.2019';
-const recordList = ['record_1', 'record_2', 'record_3'].map((title) => (
-  <Typography
-    variant="h6"
-    component="h1"
-    style={{ marginTop: '8px', color: 'white' }}
-  >
-    {title}
-  </Typography>
-));
+const datasetOptions = (label, color) => ({
+  label,
+  fill: false,
+  lineTension: 0.1,
+  backgroundColor: theme.palette.background.default,
+  borderColor: color,
+  borderCapStyle: 'butt',
+  borderDash: [],
+  borderDashOffset: 0.0,
+  borderJoinStyle: 'miter',
+  pointBorderColor: color,
+  pointBackgroundColor: '#fff',
+  pointBorderWidth: 1,
+  pointHoverRadius: 5,
+  pointHoverBackgroundColor: color,
+  pointHoverBorderColor: 'rgba(220,220,220,1)',
+  pointHoverBorderWidth: 2,
+  pointRadius: 1,
+  pointHitRadius: 10,
+});
 
-const graphList = ['temperature', 'height', 'costam', 'costaminnego'];
+function getRandomColor() {
+  const letters = '0123456789ABCDEF';
+  let color = '#';
+  for (let i = 0; i < 6; i += 1) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
+}
 
-const recordData = {
-  height: '100m',
-  temperature: '24C',
-  costam: 'hehe',
-};
 
-class Dashboard extends React.PureComponent {
+class Dashboard extends React.Component {
   constructor(props) {
     super(props);
-    this.socket = socketIOClient('http://127.0.0.1:8080');
     this.state = {
       index: 0,
-      change: false,
       recording: false,
-      data: {
-        animation: false,
-        responsive: false,
-        labels: [],
-        datasets: [
-          {
-            label: 'BMP280',
-            fill: false,
-            lineTension: 0.1,
-            backgroundColor: theme.palette.background.default,
-            borderColor: 'rgba(75,192,192,1)',
-            borderCapStyle: 'butt',
-            borderDash: [],
-            borderDashOffset: 0.0,
-            borderJoinStyle: 'miter',
-            pointBorderColor: 'rgba(75,192,192,1)',
-            pointBackgroundColor: '#fff',
-            pointBorderWidth: 1,
-            pointHoverRadius: 5,
-            pointHoverBackgroundColor: 'rgba(75,192,192,1)',
-            pointHoverBorderColor: 'rgba(220,220,220,1)',
-            pointHoverBorderWidth: 2,
-            pointRadius: 1,
-            pointHitRadius: 10,
-            data: [],
-          },
-        ],
-      },
+      records: [],
+      charts: [],
+      currentRecord: undefined,
     };
   }
 
-  componentDidUpdate() {
-    const { data, recording } = this.state;
-
-    if (recording) {
-      console.log('Recording');
-      this.socket = socketIOClient('http://127.0.0.1:8080');
-      this.socket.on('data', (press) => {
-        const { change, index } = this.state;
-        data.labels.push(index.toString());
-        this.setState({ change: !change, index: index + 1 });
-        data.datasets[0].data.push(Number(press.press));
-      });
-    } else {
-      this.socket.close();
-    }
-  }
-
   render() {
-    const { recording, data } = this.state;
+    const {
+      recording, records, charts, index, currentRecord,
+    } = this.state;
+
+    const recordList = records.map((record, idx) => (
+      <div
+        onClick={() => {
+          if (charts.length > 0 && recording) {
+            const now = new Date();
+            const title = `record_${records.length}_${now.getDate()}.${now.getMonth() < 10 ? `0${now.getMonth()}` : now.getMonth()}.${now.getFullYear()}`;
+            this.setState({
+              records: [...records, { title, charts }],
+              charts: record.charts,
+              recording: false,
+              currentRecord: record.title,
+            });
+          } else {
+            this.setState({
+              charts: record.charts,
+              recording: false,
+              currentRecord: record.title,
+            });
+          }
+        }}
+        role="button"
+        tabIndex={idx}
+        onKeyPress={(e) => console.log(e)}
+      >
+        <Typography
+          variant="h6"
+          component="h1"
+          style={{ marginTop: '8px', color: 'white' }}
+        >
+          {record.title}
+        </Typography>
+      </div>
+    ));
 
     return (
       <div style={styles.container}>
@@ -238,14 +248,85 @@ class Dashboard extends React.PureComponent {
               <Button
                 variant="contained"
                 color="primary"
-                onClick={() => { this.setState({ recording: !recording }); }}
+                onClick={() => {
+                  if (!recording) {
+                    const now = new Date();
+                    const title = `record_${records.length}_${now.getDate()}.${now.getMonth() < 10 ? `0${now.getMonth()}` : now.getMonth()}.${now.getFullYear()}`;
+
+                    this.setState({ charts: [], currentRecord: title });
+                    this.socket = socketIOClient('http://127.0.0.1:8080');
+                    this.socket.on('data', (incoming) => {
+                      const { index, recording: recordingNow, charts: chartsNow } = this.state;
+
+                      if (recordingNow) {
+                        const newCharts = [];
+                        Object.keys(incoming).forEach((key) => {
+                          let newChart = chartsNow.find((chart) => chart.title === key);
+                          if (!newChart) {
+                            if (key === 'position') {
+                              newChart = {
+                                title: key,
+                                data: [incoming[key]],
+                              };
+                            } else {
+                              newChart = {
+                                title: key,
+                                animation: false,
+                                responsive: false,
+                                labels: [index.toString()],
+                                datasets: [
+                                  {
+                                    ...datasetOptions(key, getRandomColor()),
+                                    data: [incoming[key]],
+                                  },
+                                ],
+                              };
+                            }
+                          } else if (key === 'position') {
+                            const tempData = [...newChart.data];
+                            tempData.push(incoming[key]);
+                            newChart.data = tempData;
+                          } else {
+                            const tempData = [...newChart.datasets[0].data];
+                            tempData.push(incoming[key]);
+                            const tempDataset = newChart.datasets[0];
+                            tempDataset.data = tempData;
+                            newChart.datasets = [tempDataset];
+                            newChart.labels.push(index.toString());
+                          }
+                          newCharts.push(newChart);
+                        });
+                        this.setState({ charts: [...newCharts], index: index + 1 });
+                      } else {
+                        this.socket.close();
+                      }
+                    });
+                    this.setState({ recording: true });
+                  } else if (charts.length > 0) {
+                    const now = new Date();
+                    const title = `record_${records.length}_${now.getDate()}.${now.getMonth() < 10 ? `0${now.getMonth()}` : now.getMonth()}.${now.getFullYear()}`;
+
+                    this.setState({
+                      recording: false,
+                      records: [...records, { title, charts }],
+                      charts: [],
+                      currentRecord: undefined,
+                    });
+                  } else {
+                    this.setState({
+                      recording: false,
+                      charts: [],
+                      currentRecord: undefined,
+                    });
+                  }
+                }}
               >
                 {recording ? 'STOP' : 'START'}
               </Button>
             </div>
             <div style={styles.recordInfo}>
               <Typography variant="h6" component="h1">Current record: </Typography>
-              <Typography component="p" style={{ textAlign: 'center' }}>{record}</Typography>
+              <Typography component="p" style={{ textAlign: 'center' }}>{currentRecord}</Typography>
             </div>
           </div>
           <div style={styles.leftBarSeparator} />
@@ -255,15 +336,21 @@ class Dashboard extends React.PureComponent {
         </div>
         <div style={styles.middle}>
           <div style={styles.dashboardContainer}>
-            <div style={styles.dashboard}>
-              <Chart data={data} style={styles.chart} />
-            </div>
+            {charts.filter((chart) => chart.title !== 'position').map((data) => (
+              <div style={styles.chart}>
+                <Chart data={data} />
+              </div>
+            ))}
           </div>
           <div style={styles.bottomBar}>
             <div style={styles.bottomBarLeft}>
-              <Typography style={styles.recordDataItem} component="p">
-                {`Temperature: ${recordData.temperature}`}
-              </Typography>
+              <Typography style={styles.recordDataTitle} component="h1">Latest</Typography>
+              {charts.filter((chart) => chart.title !== 'position').map((chart) => {
+                const title = chart.title[0].toUpperCase() + chart.title.slice(1);
+                return (
+                  <Typography style={styles.recordDataItem} component="p">{`${title}: ${chart.datasets[0].data[chart.datasets[0].data.length - 1]}`}</Typography>
+                );
+              })}
             </div>
             <div style={styles.bottomBarSeparator} />
             <div style={styles.bottomBarRight}>
@@ -272,23 +359,24 @@ class Dashboard extends React.PureComponent {
                 defaultCenter={{ lat: 50.047, lng: 19.920 }}
                 defaultZoom={16}
               >
-                <div lat={50.047118} lng={19.920463} style={styles.dot} />
-                <div lat={50.0470} lng={19.9205} style={styles.dot} />
-                <div lat={50.0469} lng={19.9206} style={styles.dot} />
-                <div lat={50.0468} lng={19.9206} style={styles.dot} />
-                <div lat={50.0467} lng={19.9207} style={styles.dot} />
-                <div lat={50.0466} lng={19.9207} style={styles.dot} />
-                <div lat={50.0465} lng={19.9208} style={styles.dot} />
-                <div lat={50.0464} lng={19.9209} style={styles.dot} />
-                <div lat={50.0463} lng={19.9209} style={styles.dot} />
-                <div lat={50.046277} lng={19.921075} style={styles.dot} />
-                <img
-                  alt="crosshair"
-                  src={crosshair}
-                  lat={50.046277}
-                  lng={19.921075}
-                  style={{ width: '20px', height: '20px', tintColor: 'red' }}
-                />
+                {charts.find((chart) => chart.title === 'position')
+                  ? charts.find((chart) => chart.title === 'position').data.map((data, idx) => {
+                    if (idx === charts.find((chart) => chart.title === 'position').data.length - 1) {
+                      return (
+                        <img
+                          alt="crosshair"
+                          src={crosshair}
+                          lat={data.lat}
+                          lng={data.lng}
+                          style={{
+                            width: '20px', height: '20px', tintColor: 'red', marginLeft: '-10px', marginTop: '-10px',
+                          }}
+                        />
+                      );
+                    }
+                    return (<div lat={data.lat} lng={data.lng} style={styles.dot} />);
+                  })
+                  : undefined}
               </GoogleMapReact>
             </div>
           </div>

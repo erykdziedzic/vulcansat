@@ -26,6 +26,9 @@ const SerialPort = require('serialport')
 const { Readline } = SerialPort.parsers
 let portSerial
 let parser
+io.on('connection', (socket) => {
+  console.log(`Someone connected. Socket: ${socket}`)
+})
 if (fs.existsSync(serialInputPath)) {
   portSerial = new SerialPort(serialInputPath)
   parser = portSerial.pipe(new Readline({ delimiter: '\r\n' }))
@@ -33,10 +36,14 @@ if (fs.existsSync(serialInputPath)) {
     console.log(data.split(';')[0])
     io.sockets.emit('data', { press: data.split(';')[0] })
   })
-
-  io.on('connection', (socket) => {
-    console.log(`Someone connected. Socket: ${socket}`)
-  })
 } else {
-  console.log('Device not connected!')
+  console.log('Device not connected! Random data')
+  let height = 100
+  setInterval(() => io.sockets.emit('data',
+    {
+      height: --height,
+      temperature: 17 + Math.floor(Math.random() * 5),
+      position: { lat: 50.04 + Math.random() / 100, lng: 19.92 + Math.random() / 100 }
+    }),
+  1000)
 }
