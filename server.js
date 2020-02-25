@@ -41,7 +41,7 @@ if (fs.existsSync(serialInputPath)) {
   let height = 100
   setInterval(() => io.sockets.emit('data',
     {
-      height: --height,
+      height: height > 0 ? --height : 0,
       temperature: 17 + Math.floor(Math.random() * 5),
       position: { lat: 50.04 + Math.random() / 100, lng: 19.92 + Math.random() / 100 }
     }),

@@ -111,6 +111,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     color: 'white',
+    position: 'relative',
   },
 
   bottomBarRight: {
@@ -142,7 +143,7 @@ const styles = {
 
   recordDataTitle: {
     textAlign: 'center',
-    fontSize: '1.4em',
+    fontSize: '20px',
   },
 
   recordDataItem: {
@@ -236,6 +237,14 @@ class Dashboard extends React.Component {
         </Typography>
       </div>
     ));
+
+    let lastHeight;
+    let maxHeight;
+    const heightChart = charts.find((chart) => chart.title === 'height');
+    if (heightChart) {
+      lastHeight = heightChart.datasets[0].data[heightChart.datasets[0].data.length - 1];
+      maxHeight = Math.max(...heightChart.datasets[0].data);
+    }
 
     return (
       <div style={styles.container}>
@@ -351,6 +360,46 @@ class Dashboard extends React.Component {
                   <Typography style={styles.recordDataItem} component="p">{`${title}: ${chart.datasets[0].data[chart.datasets[0].data.length - 1]}`}</Typography>
                 );
               })}
+            </div>
+            <div style={styles.bottomBarSeparator} />
+            <div style={styles.bottomBarLeft}>
+              <Typography style={styles.recordDataTitle} component="h1">Height</Typography>
+              <div style={{
+                height: 'calc(90% - 20px)', width: 'calc(100% - 16px)', borderLeft: `2px solid ${colors.orange}`, position: 'absolute', left: '8px', top: 'calc(5% + 20px)',
+              }}
+              >
+                <div style={{
+                  width: '4px',
+                  height: '4px',
+                  marginLeft: '-2px',
+                  marginTop: '-2px',
+                  backgroundColor: colors.orange,
+                  position: 'absolute',
+                  left: '50%',
+                  borderRadius: '2px',
+                  top: lastHeight ? `${(maxHeight - lastHeight) / maxHeight * 100}%` : 0,
+                }}
+                />
+                <Typography style={{
+                  color: colors.orange, position: 'absolute', left: '8px', top: '-8px',
+                }}
+                >
+                  {maxHeight}
+                </Typography>
+                <Typography style={{
+                  color: colors.orange, position: 'absolute', left: '8px', bottom: '-12px',
+                }}
+                >
+0
+                </Typography>
+                <div style={{ width: '4px', height: '3px', backgroundColor: colors.orange }} />
+                {(new Array(10).fill(0)).map(() => (
+                  <div style={{
+                    width: '4px', height: '2px', marginTop: 'calc(10% + 2px)', backgroundColor: colors.orange,
+                  }}
+                  />
+                ))}
+              </div>
             </div>
             <div style={styles.bottomBarSeparator} />
             <div style={styles.bottomBarRight}>
