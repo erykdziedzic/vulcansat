@@ -1,4 +1,4 @@
-# vulCanSat_server
+# VulCanSat Visualization App
 VulCanSat project visualization app
 
 ## Instalation:
