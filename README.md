@@ -1,12 +1,12 @@
 # vulCanSat_server
 VulCanSat project visualization app
 
-#Instalation:
+## Instalation:
 ```console
 npm i
 npm run build --prefix client
 ```
-#Usage
+## Usage
 ```console
 npm start
 ```
