@@ -1,13 +1,20 @@
 import React from 'react';
 import { Button, Typography, Checkbox } from '@material-ui/core';
-import GoogleMapReact from 'google-map-react';
+import GoogleMap from 'google-map-react';
 import socketIOClient from 'socket.io-client';
 import Chart from './Chart';
+import Height from './Height';
 import * as colors from './res/colors';
 import logo from './res/logo.png';
-import crosshair from './res/crosshair-red.png';
 import puszka from './res/puszka2.png';
+import pencil from './res/pencil.png';
 import theme from './res/theme';
+
+import percent20 from './res/20.png';
+import percent40 from './res/40.png';
+import percent60 from './res/60.png';
+import percent80 from './res/80.png';
+import percent100 from './res/100.png';
 
 const styles = {
   container: {
@@ -47,6 +54,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    overflowY: 'hidden',
   },
 
   leftBarSeparator: {
@@ -113,6 +121,10 @@ const styles = {
     flexDirection: 'column',
     color: 'white',
     position: 'relative',
+  },
+
+  batteryContainer: {
+
   },
 
   bottomBarRight: {
@@ -187,12 +199,33 @@ function getRandomColor() {
   return color;
 }
 
+const getRecordTitle = (num) => {
+  const now = new Date();
+  return `record_${num}_${now.getDate()}.${now.getMonth() < 10 ? `0${now.getMonth()}` : now.getMonth()}.${now.getFullYear()}`;
+};
+
+const MapMarkerBig = (lat, lng) => (
+  <img
+    alt="puszka"
+    src={puszka}
+    lat={lat}
+    lng={lng}
+    style={{
+      width: '20px', height: '20px', tintColor: 'red', marginLeft: '-10px', marginTop: '-10px',
+    }}
+  />
+);
+
+const MapMarker = (lat, lng) => (<div lat={lat} lng={lng} style={styles.dot} />);
+
+const chartLabels = ['temperatureDS', 'temperatureBMP', 'pressureBMP', 'altitudeBMP'];
+
+let startSecond = 0;
 
 class Dashboard extends React.Component {
   constructor(props) {
     super(props);
     this.state = {
-      index: 0,
       recording: false,
       records: [],
       charts: [],
@@ -200,48 +233,132 @@ class Dashboard extends React.Component {
     };
   }
 
+  async componentDidMount() {
+    const records = await fetch('/record').then((res) => res.json());
+    if (records !== '[]') this.setState({ records });
+  }
+
+  async addRecord(record) {
+    await fetch('/record', {
+      method: 'POST',
+      body: JSON.stringify(record),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    const records = await fetch('/record').then((res) => res.json());
+    if (records !== '[]') this.setState({ records });
+  }
+
+  async renameRecord(oldName, newName) {
+    await fetch('/record/rename', {
+      method: 'POST',
+      body: JSON.stringify({ old: oldName, new: newName }),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+    const records = await fetch('/record').then((res) => res.json());
+    if (records !== '[]') this.setState({ records });
+  }
+
+  parseIncomingData(incoming) {
+    const { recording: recordingNow, charts: chartsNow } = this.state;
+
+    if (recordingNow) {
+      const currentTime = (incoming.hour * 60 * 60 + incoming.minute * 60 + incoming.second);
+      if (chartsNow.length === 0) startSecond = currentTime;
+      const newCharts = [];
+      Object.keys(incoming).forEach((key) => {
+        let newChart = chartsNow.find((chart) => chart.title === key);
+        if (!newChart) {
+          if (chartLabels.includes(key)) {
+            newChart = {
+              title: key,
+              color: getRandomColor(),
+              labels: [(currentTime - startSecond).toString()],
+              datasets: [{ data: [incoming[key]] }],
+            };
+          } else {
+            newChart = {
+              title: key,
+              data: [incoming[key]],
+            };
+          }
+        } else if (chartLabels.includes(key)) {
+          const tempData = [...newChart.datasets[0].data];
+          tempData.push(incoming[key]);
+          const tempDataset = newChart.datasets[0];
+          tempDataset.data = tempData;
+          newChart.datasets = [tempDataset];
+          newChart.labels.push((currentTime - startSecond).toString());
+        } else {
+          const tempData = [...newChart.data];
+          tempData.push(incoming[key]);
+          newChart.data = tempData;
+        }
+        newCharts.push(newChart);
+      });
+      this.setState({ charts: [...newCharts] });
+    } else {
+      this.socket.close();
+    }
+  }
+
+  stopRecording() {
+    this.setState({
+      recording: false,
+      charts: [],
+      currentRecord: undefined,
+    });
+  }
+
   render() {
     const {
-      recording, records, charts, index, currentRecord,
+      recording, records, charts, currentRecord,
     } = this.state;
 
     const recordList = records.map((record, idx) => (
-      <div
-        onClick={() => {
-          if (charts.length > 0 && recording) {
-            const now = new Date();
-            const title = `record_${records.length}_${now.getDate()}.${now.getMonth() < 10 ? `0${now.getMonth()}` : now.getMonth()}.${now.getFullYear()}`;
-            this.setState({
-              records: [...records, { title, charts }],
-              charts: record.charts,
-              recording: false,
-              currentRecord: record.title,
-            });
-          } else {
-            this.setState({
-              charts: record.charts,
-              recording: false,
-              currentRecord: record.title,
-            });
-          }
-        }}
-        role="button"
-        tabIndex={idx}
-        onKeyPress={(e) => console.log(e)}
-      >
-        <Typography
-          variant="h6"
-          component="h1"
-          style={{ marginTop: '8px', color: 'white' }}
+      <div style={{ flexDirection: 'row', display: 'flex' }}>
+        <div
+          key={idx.toString()}
+          onClick={() => {
+            if (charts.length > 0 && recording) {
+              this.addRecord({ title: getRecordTitle(records.length), charts });
+              this.setState({
+                charts: record.charts,
+                recording: false,
+                currentRecord: record.title,
+              });
+            } else {
+              this.setState({
+                charts: record.charts,
+                recording: false,
+                currentRecord: record.title,
+              });
+            }
+          }}
+          role="button"
+          tabIndex={idx}
+          onKeyPress={() => {}}
         >
-          {record.title}
-        </Typography>
+          <Typography
+            variant="h6"
+            component="h1"
+            style={{ marginTop: '8px', color: 'white' }}
+          >
+            {record.title}
+          </Typography>
+        </div>
+        <div role="button" onClick={() => {}} onKeyPress={() => {}} tabIndex={records.length + idx} style={{ marginTop: '8px', marginLeft: '4px' }}>
+          <img style={{ width: '24px', height: '24px' }} src={pencil} alt="edit" />
+        </div>
       </div>
     ));
 
+    const heightChart = charts.find((chart) => chart.title === 'altitudeBMP');
     let lastHeight;
     let maxHeight;
-    const heightChart = charts.find((chart) => chart.title === 'height');
     if (heightChart) {
       lastHeight = heightChart.datasets[0].data[heightChart.datasets[0].data.length - 1];
       maxHeight = Math.max(...heightChart.datasets[0].data);
@@ -260,74 +377,15 @@ class Dashboard extends React.Component {
                 color="primary"
                 onClick={() => {
                   if (!recording) {
-                    const now = new Date();
-                    const title = `record_${records.length}_${now.getDate()}.${now.getMonth() < 10 ? `0${now.getMonth()}` : now.getMonth()}.${now.getFullYear()}`;
-
-                    this.setState({ charts: [], currentRecord: title });
-                    this.socket = socketIOClient('http://127.0.0.1:8080');
-                    this.socket.on('data', (incoming) => {
-                      const { index, recording: recordingNow, charts: chartsNow } = this.state;
-
-                      if (recordingNow) {
-                        const newCharts = [];
-                        Object.keys(incoming).forEach((key) => {
-                          let newChart = chartsNow.find((chart) => chart.title === key);
-                          if (!newChart) {
-                            if (key === 'position') {
-                              newChart = {
-                                title: key,
-                                data: [incoming[key]],
-                              };
-                            } else {
-                              newChart = {
-                                title: key,
-                                animation: false,
-                                responsive: false,
-                                labels: [index.toString()],
-                                datasets: [
-                                  {
-                                    ...datasetOptions(key, getRandomColor()),
-                                    data: [incoming[key]],
-                                  },
-                                ],
-                              };
-                            }
-                          } else if (key === 'position') {
-                            const tempData = [...newChart.data];
-                            tempData.push(incoming[key]);
-                            newChart.data = tempData;
-                          } else {
-                            const tempData = [...newChart.datasets[0].data];
-                            tempData.push(incoming[key]);
-                            const tempDataset = newChart.datasets[0];
-                            tempDataset.data = tempData;
-                            newChart.datasets = [tempDataset];
-                            newChart.labels.push(index.toString());
-                          }
-                          newCharts.push(newChart);
-                        });
-                        this.setState({ charts: [...newCharts], index: index + 1 });
-                      } else {
-                        this.socket.close();
-                      }
-                    });
+                    this.setState({ charts: [], currentRecord: getRecordTitle(records.length) });
+                    this.socket = socketIOClient('http://127.0.0.1:5000');
+                    this.socket.on('data', (incoming) => this.parseIncomingData(incoming));
                     this.setState({ recording: true });
                   } else if (charts.length > 0) {
-                    const now = new Date();
-                    const title = `record_${records.length}_${now.getDate()}.${now.getMonth() < 10 ? `0${now.getMonth()}` : now.getMonth()}.${now.getFullYear()}`;
-
-                    this.setState({
-                      recording: false,
-                      records: [...records, { title, charts }],
-                      charts: [],
-                      currentRecord: undefined,
-                    });
+                    this.addRecord({ title: getRecordTitle(records.length), charts });
+                    this.stopRecording();
                   } else {
-                    this.setState({
-                      recording: false,
-                      charts: [],
-                      currentRecord: undefined,
-                    });
+                    this.stopRecording();
                   }
                 }}
               >
@@ -338,6 +396,10 @@ class Dashboard extends React.Component {
               <Typography variant="h6" component="h1">Current record: </Typography>
               <Typography component="p" style={{ textAlign: 'center' }}>{currentRecord}</Typography>
             </div>
+            <div style={{ width: '60%', height: '2px', backgroundColor: colors.orange }} />
+            <div style={styles.recordInfo}>
+              <Typography variant="h6" component="h1">Stage 3: falling</Typography>
+            </div>
           </div>
           <div style={styles.leftBarSeparator} />
           <div style={styles.sideBarHalf}>
@@ -346,16 +408,29 @@ class Dashboard extends React.Component {
         </div>
         <div style={styles.middle}>
           <div style={styles.dashboardContainer}>
-            {charts.filter((chart) => chart.title !== 'position').map((data) => (
-              <div style={styles.chart}>
-                <Chart data={data} />
-              </div>
-            ))}
+            {charts.filter((chart) => chartLabels.includes(chart.title)).map((data) => {
+              const randomChart = {
+                ...data,
+                animation: false,
+                responsive: false,
+                datasets: [
+                  {
+                    ...datasetOptions(data.title, data.color),
+                    data: data.datasets[0].data,
+                  },
+                ],
+              };
+              return (
+                <div style={styles.chart}>
+                  <Chart data={randomChart} />
+                </div>
+              );
+            })}
           </div>
           <div style={styles.bottomBar}>
             <div style={styles.bottomBarLeft}>
               <Typography style={styles.recordDataTitle} component="h1">Latest</Typography>
-              {charts.filter((chart) => chart.title !== 'position').map((chart) => {
+              {charts.filter((chart) => chartLabels.includes(chart.title)).map((chart) => {
                 const title = chart.title[0].toUpperCase() + chart.title.slice(1);
                 return (
                   <Typography style={styles.recordDataItem} component="p">{`${title}: ${chart.datasets[0].data[chart.datasets[0].data.length - 1]}`}</Typography>
@@ -363,91 +438,35 @@ class Dashboard extends React.Component {
               })}
             </div>
             <div style={styles.bottomBarSeparator} />
+            <div style={{
+              ...styles.bottomBarLeft, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '8px 0',
+            }}
+            >
+              <img src={percent20} alt="battery" style={{ width: 'auto', height: '100%' }} />
+            </div>
+            <div style={styles.bottomBarSeparator} />
             <div style={styles.bottomBarRight}>
-              <GoogleMapReact
+              <GoogleMap
                 bootstrapURLKeys={{ key: 'AIzaSyAsxaRYSOoaV_1cDYnrzhYpdjnGr9i2Gx8' }}
                 defaultCenter={{ lat: 50.047, lng: 19.920 }}
                 defaultZoom={16}
               >
-                {charts.find((chart) => chart.title === 'position')
-                  ? charts.find((chart) => chart.title === 'position').data.map((data, idx) => {
-                    if (idx === charts.find((chart) => chart.title === 'position').data.length - 1) {
-                      return (
-                        <img
-                          alt="crosshair"
-                          src={crosshair}
-                          lat={data.lat}
-                          lng={data.lng}
-                          style={{
-                            width: '20px', height: '20px', tintColor: 'red', marginLeft: '-10px', marginTop: '-10px',
-                          }}
-                        />
-                      );
+                {charts.find((chart) => chart.title === 'latitudeGPS')
+                  ? charts.find((chart) => chart.title === 'latitudeGPS').data.map((lat, idx) => {
+                    const lng = charts.find((chart) => chart.title === 'longitudeGPS').data[idx];
+                    if (idx === charts.find((chart) => chart.title === 'latitudeGPS').data.length - 1) {
+                      return (<MapMarkerBig lat={lat} lng={lng} />);
                     }
-                    return (<div lat={data.lat} lng={data.lng} style={styles.dot} />);
+                    return (<MapMarker lat={lat} lng={lng} />);
                   })
                   : undefined}
-              </GoogleMapReact>
+              </GoogleMap>
             </div>
 
             <div style={styles.bottomBarSeparator} />
-
-            <div style={styles.bottomBarLeft}>
-              <Typography style={styles.recordDataTitle} component="h1">Height</Typography>
-              <div style={{
-                height: 'calc(90% - 20px)', width: 'calc(100% - 16px)', borderLeft: `2px solid ${colors.orange}`, position: 'absolute', left: '8px', top: 'calc(5% + 20px)',
-              }}
-              >
-                <div style={{
-                  width: '4px',
-                  height: '4px',
-                  marginLeft: '-2px',
-                  marginTop: '-2px',
-                  backgroundColor: colors.orange,
-                  position: 'absolute',
-                  left: '50%',
-                  borderRadius: '2px',
-                  top: lastHeight ? `${((maxHeight - lastHeight) / maxHeight) * 100}%` : 0,
-                }}
-                />
-                <Typography style={{
-                  color: colors.orange, position: 'absolute', left: '8px', top: '-8px',
-                }}
-                >
-                  {maxHeight}
-                </Typography>
-                <Typography style={{
-                  color: colors.orange, position: 'absolute', left: '8px', bottom: '-12px',
-                }}
-                >
-0
-                </Typography>
-                <div style={{ width: '4px', height: '3px', backgroundColor: colors.orange }} />
-                {(new Array(10).fill(0)).map(() => (
-                  <div style={{
-                    width: '4px', height: '2px', marginTop: 'calc(10% + 2px)', backgroundColor: colors.orange,
-                  }}
-                  />
-                ))}
-              </div>
-            </div>
+            <Height lastHeight={lastHeight} maxHeight={maxHeight} />
           </div>
         </div>
-        {/* <div style={{ ...styles.sideBar, ...styles.rightBar }}> */}
-        {/*   <div style={styles.sideBarHalf}> */}
-        {/*     {graphList.map((item) => ( */}
-        {/*       <div style={{ */}
-        {/*         display: 'flex', color: 'white', alignItems: 'center', */}
-        {/*       }} */}
-        {/*       > */}
-        {/*         <Typography style={{ width: '100px' }} component="p">{item}</Typography> */}
-        {/*         <Checkbox color="primary" /> */}
-        {/*       </div> */}
-        {/*     ))} */}
-        {/*   </div> */}
-        {/*   <div style={styles.leftBarSeparator} /> */}
-        {/*   <div style={styles.sideBarHalf} /> */}
-        {/* </div> */}
       </div>
     );
   }

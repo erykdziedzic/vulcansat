@@ -2,13 +2,13 @@ import React from 'react';
 import { Line, defaults } from 'react-chartjs-2';
 import PropTypes from 'prop-types';
 
-const xd = [];
+const update = [];
 defaults.global.animation = false;
-export default class Chart extends React.Component {
+export default class Chart extends React.PureComponent {
   render() {
     const { data } = this.props;
 
-    xd.push(data.datasets[0].data);
+    update.push(data.datasets[0].data);
 
     return (
       <Line
